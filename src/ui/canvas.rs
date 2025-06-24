@@ -1,30 +1,28 @@
 use eframe::egui::{self, Sense};
 use crate::stroke::Stroke;
 use crate::tools::ToolSettings;
+use crate::layer::LayerManager;
 
 pub struct CanvasHandler {
-    pub strokes: Vec<Stroke>,
     pub current_stroke: Option<Stroke>,
 }
 
 impl CanvasHandler {
     pub fn new() -> Self {
         Self {
-            strokes: Vec::new(),
             current_stroke: None,
         }
     }
     
     pub fn clear(&mut self) {
-        self.strokes.clear();
         self.current_stroke = None;
     }
     
-    pub fn render(&mut self, ui: &mut egui::Ui, tools: &ToolSettings) {
+    pub fn render(&mut self, ui: &mut egui::Ui, tools: &ToolSettings, layer_manager: &mut LayerManager) -> bool {
         let available_size = ui.available_size();
         
         // キャンバスの描画エリア
-        let (response, painter) = ui.allocate_painter(
+        let (response, mut painter) = ui.allocate_painter(
             available_size,
             Sense::drag(),
         );
@@ -55,19 +53,41 @@ impl CanvasHandler {
         }
         
         // ドラッグが終了したらストロークを確定
+        let mut stroke_completed = false;
         if response.drag_stopped() {
             if let Some(stroke) = self.current_stroke.take() {
                 if stroke.len() > 1 {
-                    self.strokes.push(stroke);
+                    if let Some(active_layer) = layer_manager.get_active_layer_mut() {
+                        active_layer.add_stroke(stroke);
+                        stroke_completed = true;
+                    }
                 }
             }
         }
         
-        // すべてのストロークを描画
+        // すべてのレイヤーのストロークを描画
         let offset = response.rect.min.to_vec2();
         
-        for stroke in &self.strokes {
-            stroke.draw(&painter, offset);
+        // レイヤーを正しい順序で描画（下から上へ）
+        for (_, layer) in layer_manager.get_layers_for_rendering() {
+            if (layer.opacity - 1.0).abs() < 0.001 {
+                // 完全不透明レイヤー：通常描画
+                for stroke in &layer.strokes {
+                    stroke.draw(&painter, offset);
+                }
+            } else {
+                // 透明度があるレイヤー：Painterの透明度機能を使用
+                // eGUIの制限により、この実装は近似的なものです
+                let original_opacity = painter.opacity();
+                painter.set_opacity(original_opacity * layer.opacity);
+                
+                for stroke in &layer.strokes {
+                    stroke.draw(&painter, offset);
+                }
+                
+                // 透明度を元に戻す
+                painter.set_opacity(original_opacity);
+            }
         }
         
         // 現在描画中のストロークを描画
@@ -78,12 +98,15 @@ impl CanvasHandler {
         // ステータスバー
         ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
             ui.label(format!(
-                "キャンバスサイズ: {:.0}x{:.0} | ストローク数: {}",
+                "キャンバスサイズ: {:.0}x{:.0} | 総ストローク数: {} | アクティブレイヤー: {}",
                 available_size.x,
                 available_size.y,
-                self.strokes.len()
+                layer_manager.total_stroke_count(),
+                layer_manager.get_active_layer().map_or("なし".to_string(), |l| l.name.clone())
             ));
         });
+        
+        stroke_completed
     }
 }
 

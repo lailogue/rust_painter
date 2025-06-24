@@ -1,12 +1,15 @@
 use eframe::egui;
 use crate::tools::ToolSettings;
 use crate::ui::canvas::CanvasHandler;
-use crate::ui::{render_toolbar, render_sidebar};
+use crate::ui::{render_toolbar, render_sidebar, render_layer_panel, LayerRenameState};
 use crate::font::setup_fonts;
+use crate::layer::LayerManager;
 
 pub struct PaintApp {
     tools: ToolSettings,
     canvas: CanvasHandler,
+    layer_manager: LayerManager,
+    layer_rename_state: LayerRenameState,
 }
 
 impl Default for PaintApp {
@@ -14,6 +17,8 @@ impl Default for PaintApp {
         Self {
             tools: ToolSettings::default(),
             canvas: CanvasHandler::default(),
+            layer_manager: LayerManager::default(),
+            layer_rename_state: LayerRenameState::default(),
         }
     }
 }
@@ -28,6 +33,7 @@ impl PaintApp {
     
     fn clear_canvas(&mut self) {
         self.canvas.clear();
+        self.layer_manager.clear_active_layer();
     }
 }
 
@@ -41,13 +47,24 @@ impl eframe::App for PaintApp {
         });
         
         // サイドパネル - レイヤーやその他のオプション
-        egui::SidePanel::left("layers").show(ctx, |ui| {
-            render_sidebar(ui, &mut self.tools);
-        });
+        egui::SidePanel::left("layers")
+            .resizable(true)
+            .default_width(250.0)
+            .width_range(200.0..=400.0)
+            .show(ctx, |ui| {
+                // レイヤーパネル
+                let layer_action = render_layer_panel(ui, &mut self.layer_manager, &mut self.layer_rename_state);
+                self.layer_manager.handle_layer_action(layer_action);
+                
+                ui.separator();
+                
+                // ツール設定
+                render_sidebar(ui, &mut self.tools);
+            });
         
         // メインキャンバス
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.canvas.render(ui, &self.tools);
+            let _stroke_completed = self.canvas.render(ui, &self.tools, &mut self.layer_manager);
         });
     }
 }

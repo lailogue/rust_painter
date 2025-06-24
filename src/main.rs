@@ -3,6 +3,7 @@ mod stroke;
 mod tools;
 mod font;
 mod ui;
+mod layer;
 
 use eframe::egui;
 use app::PaintApp;
