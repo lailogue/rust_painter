@@ -127,8 +127,6 @@ impl<'a> canvas::Program<Message> for PaintCanvas<'a> {
                 );
             }
             
-            // グリッドを描画（デバッグ用）
-            self.draw_grid(frame, bounds.size(), 50.0);
         });
 
         vec![canvas]
@@ -172,60 +170,84 @@ impl<'a> PaintCanvas<'a> {
             stroke_color.a * layer_opacity,
         );
         
-        if stroke.points.len() == 1 {
-            // 単一点の場合：円として描画
-            let point = &stroke.points[0];
+        // 円形ブラシ表示：各点に円を描画
+        for point in &stroke.points {
             frame.fill(
                 &Path::circle(Point::new(point.x, point.y), stroke.stroke_width / 2.0),
                 final_color,
             );
-        } else {
-            // 複数点の場合：線として描画
-            let mut path_builder = iced::widget::canvas::path::Builder::new();
-            
-            let first_point = &stroke.points[0];
-            path_builder.move_to(Point::new(first_point.x, first_point.y));
-            
-            for point in &stroke.points[1..] {
-                path_builder.line_to(Point::new(point.x, point.y));
-            }
-            
-            let path = path_builder.build();
-            let stroke_style = Stroke::default()
-                .with_width(stroke.stroke_width)
-                .with_color(final_color);
+        }
+        
+        // 点の間を補間して滑らかな表示を実現
+        if stroke.points.len() > 1 {
+            for window in stroke.points.windows(2) {
+                let p1 = window[0];
+                let p2 = window[1];
                 
-            frame.stroke(&path, stroke_style);
+                // 2点間の距離を計算
+                let dx = p2.x - p1.x;
+                let dy = p2.y - p1.y;
+                let distance = (dx * dx + dy * dy).sqrt();
+                
+                // ブラシサイズの半分の間隔で補間点を生成
+                let step_size = stroke.stroke_width / 4.0;
+                let steps = (distance / step_size).ceil() as i32;
+                
+                if steps > 1 {
+                    for i in 1..steps {
+                        let t = i as f32 / steps as f32;
+                        let x = p1.x + dx * t;
+                        let y = p1.y + dy * t;
+                        
+                        frame.fill(
+                            &Path::circle(Point::new(x, y), stroke.stroke_width / 2.0),
+                            final_color,
+                        );
+                    }
+                }
+            }
         }
     }
     
     fn draw_current_stroke_preview(&self, frame: &mut Frame, _state: &CanvasState) {
-        // 描画中のストロークを軽量表示
+        // 描画中のストロークを軽量表示（円形ブラシ対応）
         if let Some(current_stroke) = self.paint_engine.get_current_stroke() {
-            if current_stroke.points.len() >= 2 {
-                // 複数点がある場合：線として描画
-                let mut path_builder = iced::widget::canvas::path::Builder::new();
-                
-                let first_point = &current_stroke.points[0];
-                path_builder.move_to(Point::new(first_point.x, first_point.y));
-                
-                for point in &current_stroke.points[1..] {
-                    path_builder.line_to(Point::new(point.x, point.y));
-                }
-                
-                let path = path_builder.build();
-                let stroke = Stroke::default()
-                    .with_width(current_stroke.stroke_width)
-                    .with_color(current_stroke.color);
-                    
-                frame.stroke(&path, stroke);
-            } else if current_stroke.points.len() == 1 {
-                // 単一点の場合：円として描画
-                let point = &current_stroke.points[0];
+            // 各点に円を描画
+            for point in &current_stroke.points {
                 frame.fill(
                     &Path::circle(Point::new(point.x, point.y), current_stroke.stroke_width / 2.0),
                     current_stroke.color,
                 );
+            }
+            
+            // 点の間を補間して滑らかなプレビューを実現
+            if current_stroke.points.len() > 1 {
+                for window in current_stroke.points.windows(2) {
+                    let p1 = window[0];
+                    let p2 = window[1];
+                    
+                    // 2点間の距離を計算
+                    let dx = p2.x - p1.x;
+                    let dy = p2.y - p1.y;
+                    let distance = (dx * dx + dy * dy).sqrt();
+                    
+                    // ブラシサイズの半分の間隔で補間点を生成
+                    let step_size = current_stroke.stroke_width / 4.0;
+                    let steps = (distance / step_size).ceil() as i32;
+                    
+                    if steps > 1 {
+                        for i in 1..steps {
+                            let t = i as f32 / steps as f32;
+                            let x = p1.x + dx * t;
+                            let y = p1.y + dy * t;
+                            
+                            frame.fill(
+                                &Path::circle(Point::new(x, y), current_stroke.stroke_width / 2.0),
+                                current_stroke.color,
+                            );
+                        }
+                    }
+                }
             }
         }
     }

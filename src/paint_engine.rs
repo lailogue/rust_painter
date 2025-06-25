@@ -37,30 +37,43 @@ impl PaintStroke {
         ).unwrap_or(SkiaColor::BLACK));
         paint.anti_alias = true;
         
-        if self.points.len() == 1 {
-            // 単一点の場合：円を描画
-            let point = self.points[0];
+        // 円形ブラシ実装：各点に円を描画
+        for point in &self.points {
             let mut path = PathBuilder::new();
             path.push_circle(point.x, point.y, self.stroke_width / 2.0);
             if let Some(path) = path.finish() {
                 pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, tiny_skia::Transform::identity(), None);
             }
-        } else {
-            // 複数点の場合：線として描画
-            let mut path_builder = PathBuilder::new();
-            path_builder.move_to(self.points[0].x, self.points[0].y);
-            
-            for point in &self.points[1..] {
-                path_builder.line_to(point.x, point.y);
-            }
-            
-            if let Some(path) = path_builder.finish() {
-                let mut stroke = Stroke::default();
-                stroke.width = self.stroke_width;
-                stroke.line_cap = tiny_skia::LineCap::Round;
-                stroke.line_join = tiny_skia::LineJoin::Round;
+        }
+        
+        // 点の間を補間して滑らかな描画を実現
+        if self.points.len() > 1 {
+            for window in self.points.windows(2) {
+                let p1 = window[0];
+                let p2 = window[1];
                 
-                pixmap.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
+                // 2点間の距離を計算
+                let dx = p2.x - p1.x;
+                let dy = p2.y - p1.y;
+                let distance = (dx * dx + dy * dy).sqrt();
+                
+                // ブラシサイズの半分の間隔で補間点を生成
+                let step_size = self.stroke_width / 4.0;
+                let steps = (distance / step_size).ceil() as i32;
+                
+                if steps > 1 {
+                    for i in 1..steps {
+                        let t = i as f32 / steps as f32;
+                        let x = p1.x + dx * t;
+                        let y = p1.y + dy * t;
+                        
+                        let mut path = PathBuilder::new();
+                        path.push_circle(x, y, self.stroke_width / 2.0);
+                        if let Some(path) = path.finish() {
+                            pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, tiny_skia::Transform::identity(), None);
+                        }
+                    }
+                }
             }
         }
     }

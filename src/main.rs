@@ -1,4 +1,4 @@
-use iced::widget::{canvas, column, container, row, slider, text, button};
+use iced::widget::{canvas, column, container, row, slider, text, button, Space};
 use iced::{window, Application, Color, Element, Length, Settings, Theme};
 
 mod canvas_widget;
@@ -6,6 +6,7 @@ mod font;
 mod paint_engine;
 mod layer_system;
 mod tools;
+mod color_picker;
 
 use canvas_widget::PaintCanvas;
 use paint_engine::PaintEngine;
@@ -31,6 +32,14 @@ pub enum Message {
     BrushSizeChanged(f32),
     BrushOpacityChanged(f32),
     ColorChanged(Color),
+    
+    // HSV カラーピッカー関連
+    HueChanged(f32),
+    SaturationChanged(f32),
+    ValueChanged(f32),
+    
+    // 2D カラーピッカー関連
+    ColorPickerChanged(f32, f32, f32), // hue, saturation, value
     
     // レイヤー関連
     LayerAction(LayerAction),
@@ -87,6 +96,18 @@ impl Application for PaintApp {
             Message::ColorChanged(color) => {
                 self.tools.set_brush_color(color);
             }
+            Message::HueChanged(hue) => {
+                self.tools.set_hue(hue);
+            }
+            Message::SaturationChanged(saturation) => {
+                self.tools.set_saturation(saturation);
+            }
+            Message::ValueChanged(value) => {
+                self.tools.set_value(value);
+            }
+            Message::ColorPickerChanged(hue, saturation, value) => {
+                self.tools.set_hsv(hue, saturation, value);
+            }
             Message::LayerAction(action) => {
                 self.layer_manager.handle_action(action);
             }
@@ -141,7 +162,7 @@ impl Application for PaintApp {
         ];
 
         column![
-            container(toolbar).height(60),
+            container(toolbar).height(280),
             container(main_content).height(Length::Fill),
         ]
         .into()
@@ -150,34 +171,95 @@ impl Application for PaintApp {
 
 impl PaintApp {
     fn create_toolbar(&self) -> Element<Message> {
+        // 左側：ツール設定
         let brush_size_slider = row![
             text("ブラシサイズ:"),
             slider(1.0..=200.0, self.tools.brush_size, Message::BrushSizeChanged)
                 .step(1.0)
-                .width(150),
+                .width(120),
             text(format!("{:.0}", self.tools.brush_size))
         ]
-        .spacing(10);
+        .spacing(8);
 
         let opacity_slider = row![
             text("透明度:"),
             slider(0.0..=1.0, self.tools.brush_opacity, Message::BrushOpacityChanged)
                 .step(0.01)
-                .width(150),
+                .width(120),
             text(format!("{:.0}%", self.tools.brush_opacity * 100.0))
         ]
-        .spacing(10);
+        .spacing(8);
 
         let tool_buttons = row![
             button("ペン").on_press(Message::ToolChanged(Tool::Pen)),
             button("消しゴム").on_press(Message::ToolChanged(Tool::Eraser)),
         ]
-        .spacing(10);
+        .spacing(8);
 
-        row![brush_size_slider, opacity_slider, tool_buttons]
-            .spacing(20)
-            .padding(10)
-            .into()
+        let left_controls = row![brush_size_slider, opacity_slider, tool_buttons]
+            .spacing(15);
+
+        // 右側：2Dカラーピッカー
+        let current_color = self.tools.brush_color;
+        
+        // カラープレビュー（現在の色を表示）
+        let color_preview = container(
+            Space::with_width(60).height(60)
+        )
+        .style(move |_theme: &Theme| {
+            container::Appearance {
+                background: Some(iced::Background::Color(current_color)),
+                border: iced::Border {
+                    color: Color::BLACK,
+                    width: 2.0,
+                    radius: 8.0.into(),
+                },
+                ..Default::default()
+            }
+        });
+
+        // 2Dカラーピッカー（S-V平面）
+        let color_picker_2d: Element<Message> = color_picker::ColorPicker2D::new(
+            self.tools.hue, 
+            self.tools.saturation, 
+            self.tools.value
+        ).size(200.0).into();
+
+        // 色相スライダー
+        let hue_slider: Element<Message> = color_picker::HueSlider::new(self.tools.hue)
+            .size(200.0, 20.0)
+            .into();
+
+        let color_picker_section = column![
+            text("カラーピッカー").size(14),
+            Space::with_height(5),
+            color_picker_2d,
+            Space::with_height(10),
+            text(format!("色相: {:.0}°", self.tools.hue)).size(12),
+            hue_slider,
+            Space::with_height(5),
+            text(format!("彩度: {:.0}% / 明度: {:.0}%", 
+                self.tools.saturation * 100.0, 
+                self.tools.value * 100.0)).size(12)
+        ]
+        .spacing(2);
+
+        let color_section = row![
+            color_preview,
+            Space::with_width(15),
+            color_picker_section
+        ]
+        .align_items(iced::Alignment::Start);
+
+        // 全体レイアウト
+        row![
+            left_controls,
+            Space::with_width(30),
+            color_section
+        ]
+        .spacing(10)
+        .padding(10)
+        .into()
     }
 
     fn create_layer_panel(&self) -> Element<Message> {
