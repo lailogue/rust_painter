@@ -2,19 +2,19 @@ use iced::widget::{canvas, column, container, row, slider, text, button};
 use iced::{window, Application, Color, Element, Length, Settings, Theme};
 
 mod canvas_widget;
-// mod paint_engine;
-// mod layer_system;
+mod paint_engine;
+mod layer_system;
 mod tools;
 
 use canvas_widget::PaintCanvas;
-// use paint_engine::PaintEngine;
-// use layer_system::{LayerManager, LayerAction};
+use paint_engine::PaintEngine;
+use layer_system::{LayerManager, LayerAction};
 use tools::{Tool, ToolSettings};
 
 pub fn main() -> iced::Result {
     PaintApp::run(Settings {
         window: window::Settings {
-            size: iced::Size::new(1200.0, 800.0),
+            size: (1200, 800),
             ..Default::default()
         },
         ..Default::default()
@@ -30,7 +30,7 @@ pub enum Message {
     ColorChanged(Color),
     
     // レイヤー関連
-    // LayerAction(LayerAction),
+    LayerAction(LayerAction),
     
     // キャンバス関連
     CanvasMessage(canvas::Event),
@@ -38,8 +38,9 @@ pub enum Message {
 
 pub struct PaintApp {
     tools: ToolSettings,
-    // layer_manager: LayerManager,
-    // paint_engine: PaintEngine,
+    layer_manager: LayerManager,
+    paint_engine: PaintEngine,
+    canvas: canvas::Cache,
 }
 
 impl Application for PaintApp {
@@ -52,8 +53,9 @@ impl Application for PaintApp {
         (
             Self {
                 tools: ToolSettings::default(),
-                // layer_manager: LayerManager::with_size(800, 600),
-                // paint_engine: PaintEngine::new(800, 600),
+                layer_manager: LayerManager::new(),
+                paint_engine: PaintEngine::new(800, 600),
+                canvas: canvas::Cache::default(),
             },
             iced::Command::none(),
         )
@@ -77,12 +79,13 @@ impl Application for PaintApp {
             Message::ColorChanged(color) => {
                 self.tools.set_brush_color(color);
             }
-            // Message::LayerAction(action) => {
-            //     self.layer_manager.handle_action(action);
-            // }
-            Message::CanvasMessage(_event) => {
+            Message::LayerAction(action) => {
+                self.layer_manager.handle_action(action);
+                self.canvas.clear(); // キャンバスを再描画
+            }
+            Message::CanvasMessage(event) => {
                 // キャンバスイベントの処理
-                // TODO: ペイント処理の実装
+                self.canvas.clear(); // 再描画をトリガー
             }
         }
         iced::Command::none()
@@ -139,16 +142,16 @@ impl PaintApp {
     }
 
     fn create_layer_panel(&self) -> Element<Message> {
-        // let layer_buttons = row![
-        //     button("追加").on_press(Message::LayerAction(LayerAction::Add)),
-        //     button("削除").on_press(Message::LayerAction(LayerAction::Delete)),
-        // ]
-        // .spacing(10);
+        let layer_buttons = row![
+            button("追加").on_press(Message::LayerAction(LayerAction::Add)),
+            button("削除").on_press(Message::LayerAction(LayerAction::Delete)),
+        ]
+        .spacing(10);
 
         column![
             text("レイヤー").size(20),
-            // layer_buttons,
-            text("TODO: レイヤーリスト表示"),
+            layer_buttons,
+            // TODO: レイヤーリスト表示
         ]
         .spacing(10)
         .padding(10)
