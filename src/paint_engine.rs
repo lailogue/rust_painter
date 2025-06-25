@@ -102,8 +102,8 @@ impl PaintEngine {
     pub fn end_stroke(&mut self, layer_manager: &mut LayerManager) {
         if let Some(stroke) = self.current_stroke.take() {
             if let Some(active_layer) = layer_manager.get_active_layer_mut() {
-                // アクティブレイヤーにストロークを描画
-                stroke.draw_to_pixmap(&mut active_layer.pixmap);
+                // アクティブレイヤーにストロークを追加（Pixmap描画とストロークリスト保存）
+                active_layer.add_stroke(stroke);
             }
         }
         self.is_drawing = false;

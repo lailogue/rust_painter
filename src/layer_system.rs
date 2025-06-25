@@ -1,11 +1,13 @@
 use uuid::Uuid;
 use tiny_skia::{Pixmap, Paint, Color as SkiaColor, BlendMode};
+use crate::paint_engine::PaintStroke;
 
 #[derive(Debug, Clone)]
 pub struct Layer {
     pub id: Uuid,
     pub name: String,
     pub pixmap: Pixmap,
+    pub strokes: Vec<PaintStroke>, // 確定済みストロークのリスト
     pub visible: bool,
     pub opacity: f32,
 }
@@ -17,6 +19,7 @@ impl Layer {
             id: Uuid::new_v4(),
             name,
             pixmap,
+            strokes: Vec::new(),
             visible: true,
             opacity: 1.0,
         })
@@ -24,6 +27,14 @@ impl Layer {
     
     pub fn clear(&mut self) {
         self.pixmap.fill(SkiaColor::TRANSPARENT);
+        self.strokes.clear();
+    }
+    
+    pub fn add_stroke(&mut self, stroke: PaintStroke) {
+        // Pixmapに描画
+        stroke.draw_to_pixmap(&mut self.pixmap);
+        // ストロークリストに追加（iced表示用）
+        self.strokes.push(stroke);
     }
     
     pub fn set_opacity(&mut self, opacity: f32) {
@@ -148,6 +159,22 @@ impl LayerManager {
     
     pub fn active_layer_index(&self) -> usize {
         self.active_layer_index
+    }
+    
+    /// 表示可能なレイヤーとストロークのリストを取得（iced表示用）
+    pub fn get_visible_strokes(&self) -> Vec<(&PaintStroke, f32)> {
+        let mut strokes = Vec::new();
+        
+        // レイヤーを下から上へ（描画順）
+        for layer in &self.layers {
+            if layer.visible {
+                for stroke in &layer.strokes {
+                    strokes.push((stroke, layer.opacity));
+                }
+            }
+        }
+        
+        strokes
     }
     
     pub fn handle_action(&mut self, action: LayerAction) {

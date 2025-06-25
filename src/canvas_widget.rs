@@ -11,6 +11,7 @@ pub struct PaintCanvas<'a> {
     layer_manager: &'a LayerManager,
     tools: &'a ToolSettings,
     cache: canvas::Cache,
+    confirmed_strokes_cache: canvas::Cache, // 確定済みストローク専用キャッシュ
 }
 
 impl<'a> PaintCanvas<'a> {
@@ -20,11 +21,13 @@ impl<'a> PaintCanvas<'a> {
             layer_manager,
             tools,
             cache: canvas::Cache::default(),
+            confirmed_strokes_cache: canvas::Cache::default(),
         }
     }
     
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.confirmed_strokes_cache.clear();
     }
 }
 
@@ -147,14 +150,53 @@ impl<'a> canvas::Program<Message> for PaintCanvas<'a> {
 
 impl<'a> PaintCanvas<'a> {
     fn draw_confirmed_strokes_preview(&self, frame: &mut Frame) {
-        // 確定済みストロークの簡易表示（デモ用）
-        // 実際のプロダクションでは、より効率的な実装が必要
+        // LayerManagerから確定済みストロークを取得して表示
+        let visible_strokes = self.layer_manager.get_visible_strokes();
         
-        // 現在は簡単なプレースホルダーとして、
-        // 「ここに確定済みストロークが表示されます」のテキストを表示
+        for (stroke, layer_opacity) in visible_strokes {
+            self.draw_stroke_to_frame(frame, stroke, layer_opacity);
+        }
+    }
+    
+    fn draw_stroke_to_frame(&self, frame: &mut Frame, stroke: &crate::paint_engine::PaintStroke, layer_opacity: f32) {
+        if stroke.points.is_empty() {
+            return;
+        }
         
-        // TODO: LayerManagerから確定済みストロークを取得して表示
-        // 注意：これは非効率的なので、将来的にはキャッシュ機能が必要
+        // レイヤー透明度を適用した色を計算
+        let stroke_color = stroke.color;
+        let final_color = Color::from_rgba(
+            stroke_color.r,
+            stroke_color.g,
+            stroke_color.b,
+            stroke_color.a * layer_opacity,
+        );
+        
+        if stroke.points.len() == 1 {
+            // 単一点の場合：円として描画
+            let point = &stroke.points[0];
+            frame.fill(
+                &Path::circle(Point::new(point.x, point.y), stroke.stroke_width / 2.0),
+                final_color,
+            );
+        } else {
+            // 複数点の場合：線として描画
+            let mut path_builder = iced::widget::canvas::path::Builder::new();
+            
+            let first_point = &stroke.points[0];
+            path_builder.move_to(Point::new(first_point.x, first_point.y));
+            
+            for point in &stroke.points[1..] {
+                path_builder.line_to(Point::new(point.x, point.y));
+            }
+            
+            let path = path_builder.build();
+            let stroke_style = Stroke::default()
+                .with_width(stroke.stroke_width)
+                .with_color(final_color);
+                
+            frame.stroke(&path, stroke_style);
+        }
     }
     
     fn draw_current_stroke_preview(&self, frame: &mut Frame, _state: &CanvasState) {
@@ -247,4 +289,6 @@ pub struct CanvasState {
     pub is_drawing: bool,
     pub last_position: Option<Point>,
     pub needs_redraw: bool,
+    pub confirmed_strokes_cache_valid: bool, // 確定済みストロークのキャッシュが有効かどうか
+    pub last_stroke_count: usize, // 最後にキャッシュした時のストローク数
 }
