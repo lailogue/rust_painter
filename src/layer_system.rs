@@ -88,9 +88,19 @@ impl LayerManager {
             canvas_height: height,
         };
         
+        // 背景レイヤーを作成（白背景）
+        manager.add_background_layer();
         // デフォルトレイヤーを作成
         manager.add_layer("Layer 1".to_string());
         manager
+    }
+    
+    pub fn add_background_layer(&mut self) {
+        if let Some(mut layer) = Layer::new("背景".to_string(), self.canvas_width, self.canvas_height) {
+            // 背景を白で塗りつぶし
+            layer.pixmap.fill(SkiaColor::WHITE);
+            self.layers.push(layer);
+        }
     }
     
     pub fn add_layer(&mut self, name: String) {
@@ -101,7 +111,9 @@ impl LayerManager {
     }
     
     pub fn remove_layer(&mut self, index: usize) {
-        if self.layers.len() > 1 && index < self.layers.len() {
+        // 背景レイヤー（インデックス0）は削除不可
+        // かつ最低2つのレイヤーを残す（背景＋1つ以上）
+        if self.layers.len() > 2 && index < self.layers.len() && index > 0 {
             self.layers.remove(index);
             if self.active_layer_index >= self.layers.len() {
                 self.active_layer_index = self.layers.len() - 1;
@@ -112,7 +124,9 @@ impl LayerManager {
     }
     
     pub fn move_layer_up(&mut self, index: usize) {
-        if index > 0 && index < self.layers.len() {
+        // 背景レイヤー（インデックス0）は移動不可
+        // かつ背景レイヤーより上のレイヤーのみ移動可能
+        if index > 1 && index < self.layers.len() {
             self.layers.swap(index - 1, index);
             if self.active_layer_index == index {
                 self.active_layer_index = index - 1;
@@ -123,7 +137,9 @@ impl LayerManager {
     }
     
     pub fn move_layer_down(&mut self, index: usize) {
-        if index < self.layers.len() - 1 {
+        // 背景レイヤー（インデックス0）は移動不可
+        // かつ背景レイヤーの上に移動することも不可
+        if index > 0 && index < self.layers.len() - 1 {
             self.layers.swap(index, index + 1);
             if self.active_layer_index == index {
                 self.active_layer_index = index + 1;
@@ -185,7 +201,8 @@ impl LayerManager {
                 self.add_layer(new_name);
             }
             LayerAction::Delete => {
-                if self.layer_count() > 1 {
+                // 背景レイヤー（インデックス0）以外で、かつ2層以上ある場合のみ削除可能
+                if self.layer_count() > 2 && self.active_layer_index > 0 {
                     self.remove_layer(self.active_layer_index);
                 }
             }

@@ -1,0 +1,41 @@
+graph TB
+    subgraph "UI Layer (iced)"
+        A[PaintApp<br/>メインアプリケーション]
+        B[LeftToolbar<br/>ツール設定]
+        C[LayerPanel<br/>レイヤー管理]
+        D[CanvasWidget<br/>描画エリア]
+        E[ColorPickerPanel<br/>色選択]
+    end
+    
+    subgraph "Core Logic"
+        F[PaintEngine<br/>描画エンジン]
+        G[LayerManager<br/>レイヤー管理]
+        H[ToolSettings<br/>ツール設定]
+    end
+    
+    subgraph "Rendering Engine (tiny_skia)"
+        I[Pixmap<br/>画像データ]
+        J[PaintStroke<br/>ストローク]
+        K[Paint<br/>描画属性]
+    end
+    
+    subgraph "Supporting Modules"
+        L[ColorPicker2D<br/>2D色選択]
+        M[HueSlider<br/>色相選択]
+        N[Font<br/>フォント管理]
+    end
+    
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    D --> F
+    C --> G
+    B --> H
+    E --> L
+    E --> M
+    F --> I
+    F --> J
+    F --> K
+    G --> I
+    A --> N

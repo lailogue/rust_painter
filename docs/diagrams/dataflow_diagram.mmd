@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant U as User
+    participant UI as UI Layer
+    participant PE as PaintEngine
+    participant LM as LayerManager
+    participant TS as tiny_skia
+    
+    U->>UI: マウス描画開始
+    UI->>PE: start_stroke(x, y, tools)
+    PE->>PE: 新しいPaintStroke作成
+    
+    U->>UI: マウス移動
+    UI->>PE: continue_stroke(x, y)
+    PE->>PE: ストロークに点追加
+    PE->>UI: 軽量プレビュー描画
+    
+    U->>UI: マウス離す
+    UI->>PE: end_stroke()
+    PE->>TS: tiny_skia描画実行
+    PE->>LM: レイヤーにストローク追加
+    LM->>UI: 再描画要求

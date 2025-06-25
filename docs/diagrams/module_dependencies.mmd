@@ -1,0 +1,12 @@
+graph TB
+    A[main.rs] --> B[canvas_widget.rs]
+    A --> C[paint_engine.rs]
+    A --> D[layer_system.rs]
+    A --> E[tools.rs]
+    A --> F[color_picker.rs]
+    A --> G[font.rs]
+    B --> C
+    B --> D
+    B --> E
+    C --> D
+    D --> C

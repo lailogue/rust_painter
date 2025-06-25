@@ -1,4 +1,4 @@
-use iced::widget::{canvas, column, container, row, slider, text, button, Space};
+use iced::widget::{canvas, column, container, row, slider, text, button, Space, checkbox, scrollable};
 use iced::{window, Application, Color, Element, Length, Settings, Theme};
 
 mod canvas_widget;
@@ -152,17 +152,19 @@ impl Application for PaintApp {
     }
 
     fn view(&self) -> Element<Message> {
-        let toolbar = self.create_toolbar();
+        let left_toolbar = self.create_left_toolbar();
         let layer_panel = self.create_layer_panel();
         let canvas = self.create_canvas();
+        let color_picker_panel = self.create_color_picker_panel();
 
         let main_content = row![
             container(layer_panel).width(250),
             container(canvas).width(Length::Fill),
+            container(color_picker_panel).width(280),
         ];
 
         column![
-            container(toolbar).height(280),
+            container(left_toolbar).height(120),
             container(main_content).height(Length::Fill),
         ]
         .into()
@@ -170,8 +172,8 @@ impl Application for PaintApp {
 }
 
 impl PaintApp {
-    fn create_toolbar(&self) -> Element<Message> {
-        // 左側：ツール設定
+    fn create_left_toolbar(&self) -> Element<Message> {
+        // ツール設定
         let brush_size_slider = row![
             text("ブラシサイズ:"),
             slider(1.0..=200.0, self.tools.brush_size, Message::BrushSizeChanged)
@@ -196,15 +198,18 @@ impl PaintApp {
         ]
         .spacing(8);
 
-        let left_controls = row![brush_size_slider, opacity_slider, tool_buttons]
-            .spacing(15);
+        row![brush_size_slider, opacity_slider, tool_buttons]
+            .spacing(15)
+            .padding(10)
+            .into()
+    }
 
-        // 右側：2Dカラーピッカー
+    fn create_color_picker_panel(&self) -> Element<Message> {
         let current_color = self.tools.brush_color;
         
         // カラープレビュー（現在の色を表示）
         let color_preview = container(
-            Space::with_width(60).height(60)
+            Space::with_width(80).height(80)
         )
         .style(move |_theme: &Theme| {
             container::Appearance {
@@ -223,42 +228,29 @@ impl PaintApp {
             self.tools.hue, 
             self.tools.saturation, 
             self.tools.value
-        ).size(200.0).into();
+        ).size(220.0).into();
 
         // 色相スライダー
         let hue_slider: Element<Message> = color_picker::HueSlider::new(self.tools.hue)
-            .size(200.0, 20.0)
+            .size(220.0, 20.0)
             .into();
 
-        let color_picker_section = column![
-            text("カラーピッカー").size(14),
-            Space::with_height(5),
-            color_picker_2d,
+        column![
+            text("カラーピッカー").size(18),
             Space::with_height(10),
+            color_preview,
+            Space::with_height(15),
+            color_picker_2d,
+            Space::with_height(15),
             text(format!("色相: {:.0}°", self.tools.hue)).size(12),
             hue_slider,
-            Space::with_height(5),
+            Space::with_height(10),
             text(format!("彩度: {:.0}% / 明度: {:.0}%", 
                 self.tools.saturation * 100.0, 
                 self.tools.value * 100.0)).size(12)
         ]
-        .spacing(2);
-
-        let color_section = row![
-            color_preview,
-            Space::with_width(15),
-            color_picker_section
-        ]
-        .align_items(iced::Alignment::Start);
-
-        // 全体レイアウト
-        row![
-            left_controls,
-            Space::with_width(30),
-            color_section
-        ]
-        .spacing(10)
-        .padding(10)
+        .spacing(5)
+        .padding(15)
         .into()
     }
 
@@ -269,21 +261,147 @@ impl PaintApp {
         ]
         .spacing(10);
 
+        // レイヤーリストを作成（上から下へ、逆順で表示）
+        let mut layer_list = column![]
+            .spacing(5);
+
+        let layers = self.layer_manager.get_layers();
+        let active_index = self.layer_manager.active_layer_index();
+
+        // レイヤーを逆順で表示（上が最前面）
+        for (index, layer) in layers.iter().enumerate().rev() {
+            let is_active = index == active_index;
+            let is_background = index == 0;
+            
+            // レイヤー選択ボタン
+            let layer_button = if is_active {
+                button(text(&layer.name))
+                    .on_press(Message::LayerAction(LayerAction::SetActive(index)))
+                    .style(iced::theme::Button::Primary)
+                    .width(Length::Fill)
+            } else {
+                button(text(&layer.name))
+                    .on_press(Message::LayerAction(LayerAction::SetActive(index)))
+                    .style(iced::theme::Button::Secondary)
+                    .width(Length::Fill)
+            };
+
+            // 表示/非表示チェックボックス
+            let visibility_checkbox = checkbox("", layer.visible)
+                .on_toggle(move |visible| Message::LayerAction(LayerAction::SetVisible(index, visible)));
+
+            // 透明度スライダー（背景レイヤー以外）
+            let opacity_control: Element<Message> = if !is_background {
+                row![
+                    text("透明度:").size(12),
+                    slider(0.0..=1.0, layer.opacity, move |opacity| {
+                        Message::LayerAction(LayerAction::SetOpacity(index, opacity))
+                    })
+                    .step(0.01)
+                    .width(80),
+                    text(format!("{:.0}%", layer.opacity * 100.0)).size(12)
+                ]
+                .spacing(5)
+                .into()
+            } else {
+                Space::with_height(0).into()
+            };
+
+            // 上下移動ボタン（背景レイヤー以外）
+            let move_buttons: Element<Message> = if !is_background {
+                row![
+                    button("↑")
+                        .on_press(Message::LayerAction(LayerAction::MoveDown(index)))
+                        .width(30),
+                    button("↓")
+                        .on_press(Message::LayerAction(LayerAction::MoveUp(index)))
+                        .width(30),
+                ]
+                .spacing(5)
+                .into()
+            } else {
+                Space::with_width(0).into()
+            };
+
+            // レイヤー項目全体
+            let layer_item = container(
+                column![
+                    row![
+                        visibility_checkbox,
+                        layer_button,
+                        move_buttons,
+                    ]
+                    .spacing(5)
+                    .align_items(iced::Alignment::Center),
+                    opacity_control,
+                ]
+                .spacing(5)
+            )
+            .style(move |_theme: &Theme| {
+                container::Appearance {
+                    background: if is_active {
+                        Some(iced::Background::Color(Color::from_rgba(0.6, 0.8, 1.0, 0.3)))
+                    } else {
+                        Some(iced::Background::Color(Color::from_rgba(0.9, 0.9, 0.9, 0.5)))
+                    },
+                    border: iced::Border {
+                        color: if is_active { Color::from_rgb(0.3, 0.6, 0.9) } else { Color::from_rgb(0.7, 0.7, 0.7) },
+                        width: 1.0,
+                        radius: 4.0.into(),
+                    },
+                    ..Default::default()
+                }
+            })
+            .padding(8)
+            .width(Length::Fill);
+
+            layer_list = layer_list.push(layer_item);
+        }
+
+        // スクロール可能なレイヤーリスト
+        let scrollable_layers = scrollable(layer_list)
+            .height(300);
+
         column![
             text("レイヤー").size(20),
             layer_buttons,
-            text(format!("レイヤー数: {}", self.layer_manager.layer_count())),
-            text(format!("アクティブ: {}", self.layer_manager.active_layer_index() + 1)),
+            Space::with_height(10),
+            scrollable_layers,
+            Space::with_height(10),
+            text(format!("レイヤー数: {}", self.layer_manager.layer_count())).size(12),
+            text(format!("アクティブ: {}", layers.get(active_index).map_or("なし".to_string(), |l| l.name.clone()))).size(12),
         ]
-        .spacing(10)
+        .spacing(5)
         .padding(10)
         .into()
     }
 
     fn create_canvas(&self) -> Element<Message> {
-        canvas(PaintCanvas::new(&self.paint_engine, &self.layer_manager, &self.tools))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        // キャンバスを明確に区別するための境界線付きコンテナ
+        container(
+            canvas(PaintCanvas::new(&self.paint_engine, &self.layer_manager, &self.tools))
+                .width(Length::Fill)
+                .height(Length::Fill)
+        )
+        .style(|_theme: &Theme| {
+            container::Appearance {
+                background: Some(iced::Background::Color(Color::WHITE)),
+                border: iced::Border {
+                    color: Color::from_rgb(0.7, 0.7, 0.7),
+                    width: 2.0,
+                    radius: 4.0.into(),
+                },
+                shadow: iced::Shadow {
+                    color: Color::from_rgba(0.0, 0.0, 0.0, 0.1),
+                    offset: iced::Vector::new(2.0, 2.0),
+                    blur_radius: 4.0,
+                },
+                ..Default::default()
+            }
+        })
+        .padding(8)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 }
