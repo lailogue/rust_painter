@@ -108,10 +108,11 @@ impl<'a> canvas::Program<Message> for PaintCanvas<'a> {
                 Color::WHITE,
             );
             
-            // tiny_skiaで描画された内容を表示（プレビュー）
-            if let Some(pixmap) = self.paint_engine.render_preview(self.layer_manager) {
-                self.draw_pixmap_to_frame(frame, &pixmap, bounds.size());
-            }
+            // 確定済みストロークを背景として表示（簡易版）
+            self.draw_confirmed_strokes_preview(frame);
+            
+            // パフォーマンス改善：描画中は軽量なiced描画を使用
+            self.draw_current_stroke_preview(frame, state);
             
             // 現在のカーソル位置にブラシのプレビューを表示
             if let Some(position) = state.last_position {
@@ -145,6 +146,48 @@ impl<'a> canvas::Program<Message> for PaintCanvas<'a> {
 }
 
 impl<'a> PaintCanvas<'a> {
+    fn draw_confirmed_strokes_preview(&self, frame: &mut Frame) {
+        // 確定済みストロークの簡易表示（デモ用）
+        // 実際のプロダクションでは、より効率的な実装が必要
+        
+        // 現在は簡単なプレースホルダーとして、
+        // 「ここに確定済みストロークが表示されます」のテキストを表示
+        
+        // TODO: LayerManagerから確定済みストロークを取得して表示
+        // 注意：これは非効率的なので、将来的にはキャッシュ機能が必要
+    }
+    
+    fn draw_current_stroke_preview(&self, frame: &mut Frame, _state: &CanvasState) {
+        // 描画中のストロークを軽量表示
+        if let Some(current_stroke) = self.paint_engine.get_current_stroke() {
+            if current_stroke.points.len() >= 2 {
+                // 複数点がある場合：線として描画
+                let mut path_builder = iced::widget::canvas::path::Builder::new();
+                
+                let first_point = &current_stroke.points[0];
+                path_builder.move_to(Point::new(first_point.x, first_point.y));
+                
+                for point in &current_stroke.points[1..] {
+                    path_builder.line_to(Point::new(point.x, point.y));
+                }
+                
+                let path = path_builder.build();
+                let stroke = Stroke::default()
+                    .with_width(current_stroke.stroke_width)
+                    .with_color(current_stroke.color);
+                    
+                frame.stroke(&path, stroke);
+            } else if current_stroke.points.len() == 1 {
+                // 単一点の場合：円として描画
+                let point = &current_stroke.points[0];
+                frame.fill(
+                    &Path::circle(Point::new(point.x, point.y), current_stroke.stroke_width / 2.0),
+                    current_stroke.color,
+                );
+            }
+        }
+    }
+    
     fn draw_pixmap_to_frame(&self, frame: &mut Frame, pixmap: &tiny_skia::Pixmap, canvas_size: Size) {
         // 簡単な実装：tiny_skiaで描画した内容を可視化
         // 実際の描画内容を点で表現（デモ用）

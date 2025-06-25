@@ -131,6 +131,11 @@ impl PaintEngine {
         Some(preview)
     }
     
+    /// 現在描画中のストロークを取得（プレビュー用）
+    pub fn get_current_stroke(&self) -> Option<&PaintStroke> {
+        self.current_stroke.as_ref()
+    }
+    
     /// デバッグ用：キャンバスに格子を描画
     pub fn draw_grid(&self, pixmap: &mut Pixmap, grid_size: f32) {
         let mut paint = Paint::default();
