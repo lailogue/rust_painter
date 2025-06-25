@@ -51,6 +51,7 @@ pub enum LayerAction {
     SetActive(usize),
 }
 
+#[derive(Debug)]
 pub struct LayerManager {
     layers: Vec<Layer>,
     active_layer_index: usize,
@@ -202,14 +203,16 @@ impl LayerManager {
         // レイヤーを下から上へ合成
         for layer in &self.layers {
             if layer.visible {
-                let mut paint = Paint::default();
-                paint.set_alpha((layer.opacity * 255.0) as u8);
-                paint.blend_mode = BlendMode::SourceOver;
+                let pixmap_paint = tiny_skia::PixmapPaint {
+                    opacity: layer.opacity,
+                    blend_mode: BlendMode::SourceOver,
+                    quality: tiny_skia::FilterQuality::Nearest,
+                };
                 
                 result.draw_pixmap(
                     0, 0,
                     layer.pixmap.as_ref(),
-                    &tiny_skia::PixmapPaint::from_paint(paint),
+                    &pixmap_paint,
                     tiny_skia::Transform::identity(),
                     None,
                 );

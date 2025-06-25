@@ -2,13 +2,14 @@ use iced::widget::{canvas, column, container, row, slider, text, button};
 use iced::{window, Application, Color, Element, Length, Settings, Theme};
 
 mod canvas_widget;
-// mod paint_engine;
-// mod layer_system;
+mod font;
+mod paint_engine;
+mod layer_system;
 mod tools;
 
 use canvas_widget::PaintCanvas;
-// use paint_engine::PaintEngine;
-// use layer_system::{LayerManager, LayerAction};
+use paint_engine::PaintEngine;
+use layer_system::{LayerManager, LayerAction};
 use tools::{Tool, ToolSettings};
 
 pub fn main() -> iced::Result {
@@ -17,6 +18,8 @@ pub fn main() -> iced::Result {
             size: iced::Size::new(1200.0, 800.0),
             ..Default::default()
         },
+        fonts: vec![font::setup_fonts().into()],
+        default_font: font::default_font(),
         ..Default::default()
     })
 }
@@ -30,16 +33,22 @@ pub enum Message {
     ColorChanged(Color),
     
     // レイヤー関連
-    // LayerAction(LayerAction),
+    LayerAction(LayerAction),
     
     // キャンバス関連
     CanvasMessage(canvas::Event),
+    
+    // 描画関連
+    StartStroke(iced::Point),
+    ContinueStroke(iced::Point),
+    EndStroke,
 }
 
 pub struct PaintApp {
     tools: ToolSettings,
-    // layer_manager: LayerManager,
-    // paint_engine: PaintEngine,
+    layer_manager: LayerManager,
+    paint_engine: PaintEngine,
+    should_redraw: bool,
 }
 
 impl Application for PaintApp {
@@ -52,8 +61,9 @@ impl Application for PaintApp {
         (
             Self {
                 tools: ToolSettings::default(),
-                // layer_manager: LayerManager::with_size(800, 600),
-                // paint_engine: PaintEngine::new(800, 600),
+                layer_manager: LayerManager::with_size(800, 600),
+                paint_engine: PaintEngine::new(800, 600),
+                should_redraw: false,
             },
             iced::Command::none(),
         )
@@ -77,12 +87,44 @@ impl Application for PaintApp {
             Message::ColorChanged(color) => {
                 self.tools.set_brush_color(color);
             }
-            // Message::LayerAction(action) => {
-            //     self.layer_manager.handle_action(action);
-            // }
-            Message::CanvasMessage(_event) => {
+            Message::LayerAction(action) => {
+                self.layer_manager.handle_action(action);
+            }
+            Message::CanvasMessage(event) => {
                 // キャンバスイベントの処理
-                // TODO: ペイント処理の実装
+                use iced::widget::canvas;
+                match event {
+                    canvas::Event::Mouse(mouse_event) => {
+                        match mouse_event {
+                            iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
+                                // マウス左ボタンが押された：ストローク開始
+                                // この処理はcanvas_widgetで座標を取得済み
+                            }
+                            iced::mouse::Event::CursorMoved { .. } => {
+                                // マウス移動：描画中ならストローク継続
+                                // この処理もcanvas_widgetで座標を取得済み
+                            }
+                            iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
+                                // マウス左ボタンが離された：ストローク終了
+                                // この処理もcanvas_widgetで座標を取得済み
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Message::StartStroke(point) => {
+                self.paint_engine.start_stroke(point.x, point.y, &self.tools);
+                self.should_redraw = true;
+            }
+            Message::ContinueStroke(point) => {
+                self.paint_engine.continue_stroke(point.x, point.y);
+                self.should_redraw = true;
+            }
+            Message::EndStroke => {
+                self.paint_engine.end_stroke(&mut self.layer_manager);
+                self.should_redraw = true;
             }
         }
         iced::Command::none()
@@ -139,16 +181,17 @@ impl PaintApp {
     }
 
     fn create_layer_panel(&self) -> Element<Message> {
-        // let layer_buttons = row![
-        //     button("追加").on_press(Message::LayerAction(LayerAction::Add)),
-        //     button("削除").on_press(Message::LayerAction(LayerAction::Delete)),
-        // ]
-        // .spacing(10);
+        let layer_buttons = row![
+            button("追加").on_press(Message::LayerAction(LayerAction::Add)),
+            button("削除").on_press(Message::LayerAction(LayerAction::Delete)),
+        ]
+        .spacing(10);
 
         column![
             text("レイヤー").size(20),
-            // layer_buttons,
-            text("TODO: レイヤーリスト表示"),
+            layer_buttons,
+            text(format!("レイヤー数: {}", self.layer_manager.layer_count())),
+            text(format!("アクティブ: {}", self.layer_manager.active_layer_index() + 1)),
         ]
         .spacing(10)
         .padding(10)
@@ -156,7 +199,7 @@ impl PaintApp {
     }
 
     fn create_canvas(&self) -> Element<Message> {
-        canvas(PaintCanvas::default())
+        canvas(PaintCanvas::new(&self.paint_engine, &self.layer_manager, &self.tools))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()

@@ -6,24 +6,15 @@ use crate::layer_system::LayerManager;
 #[derive(Debug, Clone)]
 pub struct PaintStroke {
     pub points: Vec<Point>,
-    pub paint: Paint,
+    pub color: iced::Color,
     pub stroke_width: f32,
 }
 
 impl PaintStroke {
     pub fn new(color: Color, width: f32) -> Self {
-        let mut paint = Paint::default();
-        paint.set_color(SkiaColor::from_rgba(
-            (color.r * 255.0) as u8,
-            (color.g * 255.0) as u8,
-            (color.b * 255.0) as u8,
-            (color.a * 255.0) as u8,
-        ).unwrap_or(SkiaColor::BLACK));
-        paint.anti_alias = true;
-        
         Self {
             points: Vec::new(),
-            paint,
+            color,
             stroke_width: width,
         }
     }
@@ -37,13 +28,22 @@ impl PaintStroke {
             return;
         }
         
+        let mut paint = Paint::default();
+        paint.set_color(SkiaColor::from_rgba(
+            self.color.r,
+            self.color.g,
+            self.color.b,
+            self.color.a,
+        ).unwrap_or(SkiaColor::BLACK));
+        paint.anti_alias = true;
+        
         if self.points.len() == 1 {
             // 単一点の場合：円を描画
             let point = self.points[0];
             let mut path = PathBuilder::new();
             path.push_circle(point.x, point.y, self.stroke_width / 2.0);
             if let Some(path) = path.finish() {
-                pixmap.fill_path(&path, &self.paint, tiny_skia::FillRule::Winding, tiny_skia::Transform::identity(), None);
+                pixmap.fill_path(&path, &paint, tiny_skia::FillRule::Winding, tiny_skia::Transform::identity(), None);
             }
         } else {
             // 複数点の場合：線として描画
@@ -60,12 +60,13 @@ impl PaintStroke {
                 stroke.line_cap = tiny_skia::LineCap::Round;
                 stroke.line_join = tiny_skia::LineJoin::Round;
                 
-                pixmap.stroke_path(&path, &self.paint, &stroke, tiny_skia::Transform::identity(), None);
+                pixmap.stroke_path(&path, &paint, &stroke, tiny_skia::Transform::identity(), None);
             }
         }
     }
 }
 
+#[derive(Debug)]
 pub struct PaintEngine {
     pub width: u32,
     pub height: u32,
@@ -133,7 +134,7 @@ impl PaintEngine {
     /// デバッグ用：キャンバスに格子を描画
     pub fn draw_grid(&self, pixmap: &mut Pixmap, grid_size: f32) {
         let mut paint = Paint::default();
-        paint.set_color(SkiaColor::from_rgba(200, 200, 200, 100).unwrap_or(SkiaColor::GRAY));
+        paint.set_color(SkiaColor::from_rgba(0.8, 0.8, 0.8, 0.4).unwrap_or(SkiaColor::BLACK));
         paint.anti_alias = true;
         
         let mut stroke = Stroke::default();
